@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flappy Mole Chemistry Edition</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #game-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    canvas {
+      border-radius: 4px;
+      display: block;
+    }
+    #retry-btn {
+      display: none;
+      position: absolute;
+      top: 65%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 12px 28px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #fff;
+      background-color: #ff5252;
+      border: 3px solid #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      transition: all 0.2s;
+    }
+    #retry-btn:hover {
+      background-color: #ff2a2a;
+      transform: translate(-50%, -53%) scale(1.05);
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+</head>
+
+<body>
+<div id="game-container">
+  <button id="retry-btn" onclick="resetGameFromButton()">Retry the Experiment</button>
+</div>
+
+<script>
+
+let mole;
+let beakers = [];
+let bgMoles = [];
+
+let score = 0;
+let highScore = 0;
+
+let gameState = "start"; // start, play, gameover
+let retryButton;
+
+function setup() {
+  let canvas = createCanvas(800, 600);
+  canvas.parent('game-container');
+
+  retryButton = document.getElementById('retry-btn');
+  highScore = localStorage.getItem("moleHighScore") || 0;
+
+  mole = new Mole();
+
+  for (let i = 0; i < 8; i++) {
+    bgMoles.push(new BackgroundMole());
+  }
+}
+
+function draw() {
+  background(135, 206, 250);
+
+  drawSkyMessages();
+  drawSigns();
+  
+  for (let bm of bgMoles) {
+    bm.update();
+    bm.show();
+  }
+
+  if (gameState === "start") {
+    startScreen();
+  }
+
+  if (gameState === "play") {
+    playGame();
+  }
+
+  if (gameState === "gameover") {
+    playGame();
+    gameOverScreen();
+  }
+}
+
+/* ---------------- GAME LOOP ---------------- */
+
+function playGame() {
+  if (gameState === "play" && frameCount % 90 === 0) {
+    beakers.push(new Beaker());
+  }
+
+  for (let i = beakers.length - 1; i >= 0; i--) {
+    beakers[i].update();
+    beakers[i].show();
+
+    if (beakers[i].hits(mole)) {
+      endGame();
+    }
+
+    if (!beakers[i].scored && beakers[i].x < mole.x) {
+      score++;
+      beakers[i].scored = true;
+    }
+
+    if (beakers[i].offscreen()) {
+      beakers.splice(i, 1);
+    }
+  }
+
+  mole.update();
+  mole.show();
+
+  drawHUD();
+}
+
+/* ---------------- MOLE ---------------- */
+
+class Mole {
+  constructor() {
+    this.x = 150;
+    this.y = height / 2;
+    this.vel = 0;
+  }
+
+  show() {
+    fill(139, 69, 19);
+    ellipse(this.x, this.y, 50, 40);
+
+    // eyes
+    fill(255);
+    ellipse(this.x + 10, this.y - 8, 10);
+    fill(0);
+    ellipse(this.x + 10, this.y - 8, 4);
+
+    // ears
+    fill(255, 192, 203);
+    ellipse(this.x - 15, this.y - 18, 12);
+    ellipse(this.x + 5, this.y - 18, 12);
+  }
+
+  update() {
+    if (gameState === "play") {
+      this.vel += 0.6;
+      this.y += this.vel;
+    }
+
+    if (this.y > height) endGame();
+    if (this.y < 0) this.y = 0;
+  }
+
+  flap() {
+    this.vel = -10;
+    playQuietSqueak();
+  }
+}
+
+/* ---------------- BEAKERS ---------------- */
+
+class Beaker {
+  constructor() {
+    this.spacing = 180;
+    this.top = random(80, 320);
+    this.x = width;
+    this.w = 80;
+    this.speed = 4;
+    this.scored = false;
+  }
+
+  update() {
+    if (gameState === "play") {
+      this.x -= this.speed;
+    }
+  }
+
+  show() {
+    stroke(255, 255, 255, 180);
+    strokeWeight(2);
+
+    // --- TOP BEAKER ---
+    fill(0, 150, 255, 130); 
+    rect(this.x + 4, 0, this.w - 8, this.top - 10);
+    fill(240, 248, 255, 70); 
+    rect(this.x, -10, this.w, this.top + 10);
+    rect(this.x - 6, this.top - 8, this.w + 12, 8, 2);
+    
+    stroke(255, 120);
+    strokeWeight(1.5);
+    for (let l = 40; l < this.top - 10; l += 40) {
+      line(this.x + 8, l, this.x + 20, l);
+      line(this.x + 8, l + 10, this.x + 14, l + 10);
+    }
+
+    // --- BOTTOM BEAKER ---
+    stroke(255, 255, 255, 180);
+    strokeWeight(2);
+    fill(255, 80, 80, 130); 
+    rect(this.x + 4, this.top + this.spacing + 15, this.w - 8, height - (this.top + this.spacing));
+    fill(240, 248, 255, 70);
+    rect(this.x, this.top + this.spacing, this.w, height - (this.top + this.spacing) + 10);
+    rect(this.x - 6, this.top + this.spacing, this.w + 12, 8, 2);
+
+    stroke(255, 120);
+    strokeWeight(1.5);
+    for (let l = this.top + this.spacing + 40; l < height - 20; l += 40) {
+      line(this.x + 8, l, this.x + 20, l);
+      line(this.x + 8, l + 10, this.x + 14, l + 10);
+    }
+
+    noStroke();
+  }
+
+  hits(m) {
+    if (m.y < this.top || m.y > this.top + this.spacing) {
+      if (m.x + 22 > this.x - 6 && m.x - 22 < this.x + this.w + 6) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  offscreen() {
+    return this.x < -(this.w + 20);
+  }
+}
+
+/* ---------------- BACKGROUND MOLES ---------------- */
+
+class BackgroundMole {
+  constructor() {
+    this.x = random(width);
+    this.y = random(height - 100);
+    this.dx = random(-0.7, 0.7);
+    this.emoji = random(["🧪", "🔬"]);
+  }
+
+  update() {
+    this.x += this.dx;
+    if (this.x < 0) this.x = width;
+    if (this.x > width) this.x = 0;
+  }
+
+  show() {
+    fill(160, 82, 45, 140);
+    ellipse(this.x, this.y, 25, 20);
+
+    fill(255, 192, 203, 140);
+    ellipse(this.x - 6, this.y - 6, 6);
+    ellipse(this.x + 6, this.y - 6, 6);
+
+    textSize(28); 
+    fill(255);
+    text(this.emoji, this.x + 12, this.y - 5);
+  }
+}
+
+/* ---------------- INPUT ---------------- */
+
+function mousePressed() {
+  if (gameState === "play") mole.flap();
+}
+
+function keyPressed() {
+  if (key === " ") {
+    if (gameState === "start") {
+      startGame();
+    } else if (gameState === "play") {
+      mole.flap();
+    }
+  }
+}
+
+/* ---------------- STATES ---------------- */
+
+function startGame() {
+  gameState = "play";
+  retryButton.style.display = "none";
+}
+
+function endGame() {
+  if (gameState !== "gameover") {
+    gameState = "gameover";
+    playOofSound();
+    retryButton.style.display = "block";
+
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem("moleHighScore", highScore);
+    }
+  }
+}
+
+function resetGameFromButton() {
+  score = 0;
+  beakers = [];
+  mole.y = height / 2;
+  mole.vel = 0;
+  gameState = "play";
+  retryButton.style.display = "none";
+}
+
+/* ---------------- UI ---------------- */
+
+function drawHUD() {
+  fill(50);
+  textSize(20);
+  text("Score: " + score, 20, 35);
+  text("High Score: " + highScore, 20, 65);
+}
+
+function startScreen() {
+  fill(50);
+  textAlign(CENTER, CENTER);
+  textSize(50);
+  text("FLAPPY MOLE", width / 2, height / 2 - 40);
+
+  textSize(22);
+  text("Press SPACE to start", width / 2, height / 2 + 30);
+  textAlign(LEFT, BASELINE);
+}
+
+function gameOverScreen() {
+  fill(255, 255, 255, 40);
+  rect(0, 0, width, height);
+
+  fill(50);
+  textAlign(CENTER, CENTER);
+  
+  textSize(42);
+  text("womp womp", width / 2, height / 2 - 150);
+  
+  textSize(20);
+  text("chemistry is hard you failed your experiment try again", width / 2, height / 2 - 100);
+
+  fill(255, 60, 60);
+  textSize(28);
+  text("Your Score: " + score, width / 2, height / 2 - 40);
+  
+  textAlign(LEFT, BASELINE);
+}
+
+/* ---------------- SKY ---------------- */
+
+function drawSkyMessages() {
+  fill(255, 200);
+  textSize(24);
+  text("I tried Mrs. Astor", 50, height - 80);
+
+  if (frameCount % 300 < 150) {
+    text("I really love chemistry", 50, height - 50);
+  }
+}
+
+/* ---------------- SIGNS ---------------- */
+
+function drawSigns() {
+  fill(120, 90, 70, 180); 
+  rect(30, height - 30, 4, 30);
+  rect(width - 40, height - 30, 4, 30);
+
+  fill(150, 120, 90, 180); 
+  rect(15, height - 40, 34, 14, 2);
+  rect(width - 55, height - 40, 34, 14, 2);
+
+  fill(240, 240, 240, 150);
+  textSize(8);
+  textAlign(CENTER, CENTER);
+  text("67 Chem", 32, height - 33);
+  text("67 Chem", width - 38, height - 33);
+  textAlign(LEFT, BASELINE);
+}
+
+/* ---------------- SYNTHETIC AUDIO ENGINE ---------------- */
+
+function playQuietSqueak() {
+  if (typeof p5.Oscillator !== 'undefined') {
+    let osc = new p5.Oscillator();
+    osc.setType('sine'); 
+    osc.freq(random(600, 750));
+    osc.amp(0.04); 
+    osc.start();
+
+    setTimeout(() => {
+      osc.stop();
+    }, 60);
+  }
+}
+
+function playOofSound() {
+  if (typeof p5.Oscillator !== 'undefined') {
+    let osc = new p5.Oscillator();
+    osc.setType('sawtooth');
+    
+    osc.freq(240);
+    osc.amp(0.25);
+    osc.start();
+    
+    let steps = 10;
+    for (let i = 0; i <= steps; i++) {
+      setTimeout(() => {
+        let ratio = i / steps;
+        osc.freq(240 - (ratio * 130)); 
+      }, i * 15);
+    }
+
+    setTimeout(() => {
+      osc.stop();
+    }, 180);
+  }
+}
+
+</script>
+</body>
+</html>
